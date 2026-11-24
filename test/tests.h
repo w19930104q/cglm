@@ -364,10 +364,12 @@ TEST_DECLARE(glmc_frustum)
 TEST_DECLARE(glm_unprojecti)
 TEST_DECLARE(glm_unproject)
 TEST_DECLARE(glm_project)
+TEST_DECLARE(glm_unproject_snapshot)
 
 TEST_DECLARE(glmc_unprojecti)
 TEST_DECLARE(glmc_unproject)
 TEST_DECLARE(glmc_project)
+TEST_DECLARE(glmc_unproject_snapshot)
 
 /* plane */
 TEST_DECLARE(glm_plane_normalize)
@@ -1591,10 +1593,12 @@ TEST_LIST {
   TEST_ENTRY(glm_unprojecti)
   TEST_ENTRY(glm_unproject)
   TEST_ENTRY(glm_project)
+  TEST_ENTRY(glm_unproject_snapshot)
   
   TEST_ENTRY(glmc_unprojecti)
   TEST_ENTRY(glmc_unproject)
   TEST_ENTRY(glmc_project)
+  TEST_ENTRY(glmc_unproject_snapshot)
   
   /* plane */
   TEST_ENTRY(glm_plane_normalize)

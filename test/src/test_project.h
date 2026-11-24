@@ -110,3 +110,95 @@ TEST_IMPL(GLM_PREFIX, project) {
 
   TEST_SUCCESS
 }
+
+/*
+ * fixed sample CG-A: viewport 1280x720, vertical fov 60deg, near 0.1,
+ * far 100, camera at (0, 0, 5) looking at the origin.
+ *
+ *  - screen center unprojects to direction (0, 0, -1)
+ *  - top-right corner ray passes through (0.1026, 0.0577, 4.9) on the
+ *    near plane
+ *  - after shrinking to 640x720 the same top-right corner keeps its
+ *    vertical component 0.0577
+ *  - zero viewport size makes the snapshot update fail with -1 and the
+ *    previous frame's snapshot stays intact (rollback)
+ *  - the view matrix is preserved element-wise
+ */
+TEST_IMPL(GLM_PREFIX, unproject_snapshot) {
+  mat4 view, view_keep, proj;
+  glm_project_snapshot snap, snap_keep;
+  vec4 vp_full   = {0.0f, 0.0f, 1280.0f, 720.0f};
+  vec4 vp_narrow = {0.0f, 0.0f,  640.0f, 720.0f};
+  vec4 vp_zero   = {0.0f, 0.0f,    0.0f, 720.0f};
+  vec3 near_pt, far_pt, dir, corner, corner_prev;
+  float half_h, half_w;
+  int i, j;
+
+  glm_lookat((vec3){0.0f, 0.0f, 5.0f},
+             (vec3){0.0f, 0.0f, 0.0f},
+             GLM_YUP,
+             view);
+  glm_mat4_copy(view, view_keep);
+  glm_perspective(glm_rad(60.0f), 1280.0f / 720.0f, 0.1f, 100.0f, proj);
+
+  half_h = 0.1f * tanf(glm_rad(30.0f));  /* ~0.0577 */
+  half_w = half_h * (1280.0f / 720.0f);  /* ~0.1026 */
+
+  ASSERT(GLM(project_snapshot_update)(&snap, view, proj, vp_full) == 0)
+
+  /* screen center unprojects to direction (0, 0, -1) */
+  GLM(unproject_snapshot)((vec3){640.0f, 360.0f, 0.0f}, &snap, near_pt);
+  GLM(unproject_snapshot)((vec3){640.0f, 360.0f, 1.0f}, &snap, far_pt);
+  glm_vec3_sub(far_pt, near_pt, dir);
+  glm_vec3_normalize(dir);
+
+  ASSERT(fabsf(dir[0] -  0.0f) < 0.0001f)
+  ASSERT(fabsf(dir[1] -  0.0f) < 0.0001f)
+  ASSERT(fabsf(dir[2] - -1.0f) < 0.0001f)
+
+  /* top-right corner ray hits the near plane at (0.1026, 0.0577, 4.9) */
+  GLM(unproject_snapshot)((vec3){1280.0f, 720.0f, 0.0f}, &snap, corner);
+
+  ASSERT(fabsf(corner[0] - half_w) < 0.0001f)
+  ASSERT(fabsf(corner[1] - half_h) < 0.0001f)
+  ASSERT(fabsf(corner[2] - 4.9f)   < 0.0001f)
+
+  /* shrink to 640x720: same top-right corner keeps vertical component */
+  glm_perspective(glm_rad(60.0f), 640.0f / 720.0f, 0.1f, 100.0f, proj);
+  ASSERT(GLM(project_snapshot_update)(&snap, view, proj, vp_narrow) == 0)
+
+  GLM(unproject_snapshot)((vec3){640.0f, 720.0f, 0.0f}, &snap, corner);
+
+  ASSERT(fabsf(corner[1] - half_h) < 0.0001f)
+  ASSERT(fabsf(corner[2] - 4.9f)   < 0.0001f)
+
+  /* zero size: update fails and the previous snapshot stays intact */
+  snap_keep = snap;
+  ASSERT(GLM(project_snapshot_update)(&snap, view, proj, vp_zero) == -1)
+
+  for (i = 0; i < 4; i++) {
+    for (j = 0; j < 4; j++) {
+      ASSERT(snap.view[i][j]        == snap_keep.view[i][j])
+      ASSERT(snap.proj[i][j]        == snap_keep.proj[i][j])
+      ASSERT(snap.viewProj[i][j]    == snap_keep.viewProj[i][j])
+      ASSERT(snap.invViewProj[i][j] == snap_keep.invViewProj[i][j])
+    }
+    ASSERT(snap.viewport[i] == snap_keep.viewport[i])
+  }
+
+  /* cursor unprojection still uses the current (rolled-back) snapshot */
+  GLM(unproject_snapshot)((vec3){640.0f, 720.0f, 0.0f}, &snap, corner_prev);
+
+  ASSERT(fabsf(corner_prev[0] - corner[0]) < 0.0001f)
+  ASSERT(fabsf(corner_prev[1] - corner[1]) < 0.0001f)
+  ASSERT(fabsf(corner_prev[2] - corner[2]) < 0.0001f)
+
+  /* the view matrix must be preserved element-wise */
+  for (i = 0; i < 4; i++) {
+    for (j = 0; j < 4; j++) {
+      ASSERT(view[i][j] == view_keep[i][j])
+    }
+  }
+
+  TEST_SUCCESS
+}

@@ -37,3 +37,20 @@ void
 glmc_pickmatrix(const vec2 center, const vec2 size, const vec4 vp, mat4 dest) {
   glm_pickmatrix(center, size, vp, dest);
 }
+
+CGLM_EXPORT
+int
+glmc_project_snapshot_update(glm_project_snapshot *snap,
+                             CGLM_CONST mat4       view,
+                             CGLM_CONST mat4       proj,
+                             const vec4            vp) {
+  return glm_project_snapshot_update(snap, view, proj, vp);
+}
+
+CGLM_EXPORT
+void
+glmc_unproject_snapshot(const vec3            pos,
+                        glm_project_snapshot *snap,
+                        vec3                  dest) {
+  glm_unproject_snapshot(pos, snap, dest);
+}

@@ -25,6 +25,27 @@
 #endif
 
 /*!
+ * @brief camera snapshot for projection/unprojection
+ *
+ * captures the camera state (view matrix, projection matrix and viewport)
+ * of a frame so that cursor unprojection always uses one consistent camera
+ * state, even while the window/viewport is being resized.
+ *
+ * the snapshot is rollback-able across size switches:
+ * glm_project_snapshot_update() is transactional, if the new viewport
+ * has zero (or negative) size it returns -1 and leaves the previous
+ * frame's snapshot untouched, so picking keeps working with the last
+ * valid camera state.
+ */
+typedef struct glm_project_snapshot {
+  mat4 view;        /*!< copy of view matrix                        */
+  mat4 proj;        /*!< copy of projection matrix                  */
+  mat4 viewProj;    /*!< proj * view                                */
+  mat4 invViewProj; /*!< inverse of viewProj, used by unprojection  */
+  vec4 viewport;    /*!< viewport as [x, y, width, height]          */
+} glm_project_snapshot;
+
+/*!
  * @brief maps the specified viewport coordinates into specified space [1]
  *        the matrix should contain projection matrix.
  *
@@ -134,6 +155,67 @@ glm_project_z(const vec3 v, CGLM_CONST mat4 m) {
 #elif CGLM_CONFIG_CLIP_CONTROL & CGLM_CLIP_CONTROL_NO_BIT
   return glm_project_z_no(v, m);
 #endif
+}
+
+/*!
+ * @brief capture or refresh a camera snapshot for the current frame
+ *
+ * the update is transactional to keep the snapshot rollback-able across
+ * viewport size switches: if the new viewport has zero (or negative)
+ * width or height, the snapshot is left untouched and -1 is returned,
+ * so the previous frame's snapshot stays valid for unprojection.
+ *
+ * the input matrices are only read; the view matrix is preserved
+ * element-wise.
+ *
+ * @param[in,out] snap  camera snapshot to fill
+ * @param[in]     view  view matrix
+ * @param[in]     proj  projection matrix
+ * @param[in]     vp    viewport as [x, y, width, height]
+ *
+ * @returns 0 on success, -1 if viewport size is zero/negative
+ *          (snapshot is left unchanged)
+ */
+CGLM_INLINE
+int
+glm_project_snapshot_update(glm_project_snapshot *snap,
+                            CGLM_CONST mat4       view,
+                            CGLM_CONST mat4       proj,
+                            const vec4            vp) {
+  mat4 viewProj;
+
+  if (vp[2] <= 0.0f || vp[3] <= 0.0f)
+    return -1;
+
+  glm_mat4_mul(proj, view, viewProj);
+
+  glm_mat4_copy(view, snap->view);
+  glm_mat4_copy(proj, snap->proj);
+  glm_mat4_copy(viewProj, snap->viewProj);
+  glm_mat4_inv(viewProj, snap->invViewProj);
+  glm_vec4_copy(vp, snap->viewport);
+
+  return 0;
+}
+
+/*!
+ * @brief maps viewport (cursor) coordinates into world space using the
+ *        given camera snapshot
+ *
+ * always uses the snapshot's cached inverse view-projection matrix and
+ * viewport, so cursor unprojection stays consistent with the frame the
+ * snapshot was captured at, even while the window is being resized.
+ *
+ * @param[in]  pos   point/position in viewport coordinates
+ * @param[in]  snap  camera snapshot (see glm_project_snapshot_update)
+ * @param[out] dest  unprojected coordinates
+ */
+CGLM_INLINE
+void
+glm_unproject_snapshot(const vec3            pos,
+                       glm_project_snapshot *snap,
+                       vec3                  dest) {
+  glm_unprojecti(pos, snap->invViewProj, snap->viewport, dest);
 }
 
 /*!
